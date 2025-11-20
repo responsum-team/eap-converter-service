@@ -1,0 +1,35 @@
+services:
+  # Minimal development setup - just Gotenberg for testing
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: gotenberg-dev
+    ports:
+      - "3000:3000"
+    command:
+      - "gotenberg"
+      - "--api-timeout=120s"
+      - "--log-level=debug"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis-dev
+    ports:
+      - "6379:6379"
+    command: redis-server
+
+  minio:
+    image: minio/minio
+    container_name: minio-dev
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+
