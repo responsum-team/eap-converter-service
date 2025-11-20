@@ -1,0 +1,565 @@
+# Document Conversion Service - Cursor Rules
+
+## Project Overview
+TypeScript-based microservices document conversion API using Express, Redis, MinIO, and Gotenberg.
+
+## Technology Stack
+- **Runtime**: Node.js 18+
+- **Language**: TypeScript 5.3+ (strict mode)
+- **Framework**: Express 4.x
+- **Queue**: Bull + Redis
+- **Storage**: MinIO (S3-compatible)
+- **Conversion**: Gotenberg (LibreOffice-based)
+
+---
+
+## TypeScript Best Practices
+
+### 1. Type Safety
+- ✅ **ALWAYS** use explicit types for function parameters and return types
+- ✅ **NEVER** use `any` type - use `unknown` if type is truly unknown
+- ✅ Use strict TypeScript configuration (already enabled in tsconfig.json)
+- ✅ Leverage type inference for variables when obvious
+- ✅ Create interfaces/types in `src/types/` for shared data structures
+
+**Good:**
+```typescript
+async function convertToPDF(filePath: string, originalName: string): Promise<Buffer> {
+  // implementation
+}
+
+interface JobData {
+  jobId: string;
+  filePath: string;
+  originalName: string;
+}
+```
+
+**Bad:**
+```typescript
+async function convertToPDF(filePath: any, originalName: any): Promise<any> {
+  // Never do this!
+}
+```
+
+### 2. Error Handling
+- ✅ **ALWAYS** use try-catch blocks for async operations
+- ✅ Type error objects: `catch (error)` → `(error as Error)`
+- ✅ Provide meaningful error messages
+- ✅ Log errors with context before throwing/returning
+- ✅ Use custom error classes when appropriate
+
+**Pattern:**
+```typescript
+try {
+  const result = await someAsyncOperation();
+  return result;
+} catch (error) {
+  console.error('Context about what failed:', error);
+  throw new Error(`Descriptive message: ${(error as Error).message}`);
+}
+```
+
+### 3. Async/Await
+- ✅ **ALWAYS** use async/await over callbacks or raw promises
+- ✅ Handle promise rejections explicitly
+- ✅ Use `Promise.all()` for parallel operations
+- ✅ Avoid blocking operations in async functions
+- ✅ Return promises from async functions explicitly
+
+**Good:**
+```typescript
+async function processMultipleFiles(files: string[]): Promise<string[]> {
+  return await Promise.all(files.map(file => processFile(file)));
+}
+```
+
+### 4. Null Safety
+- ✅ Use optional chaining: `obj?.property`
+- ✅ Use nullish coalescing: `value ?? default`
+- ✅ Check for null/undefined before use
+- ✅ Use non-null assertion (!) only when absolutely certain
+
+**Pattern:**
+```typescript
+const result = jobStatus?.resultPath ?? null;
+if (!result) {
+  return res.status(404).json({ error: 'Result not found' });
+}
+```
+
+### 5. Type Guards
+- ✅ Create type guards for runtime type checking
+- ✅ Use `instanceof` for class instances
+- ✅ Use `typeof` for primitives
+- ✅ Create custom type predicates when needed
+
+**Example:**
+```typescript
+function isJobStatus(obj: unknown): obj is JobStatus {
+  return typeof obj === 'object' && obj !== null && 'jobId' in obj;
+}
+```
+
+---
+
+## Express API Best Practices
+
+### 1. Route Handlers
+- ✅ **ALWAYS** type Request and Response: `(req: Request, res: Response)`
+- ✅ Use async handlers for async operations
+- ✅ Return responses explicitly (avoid forgetting return statements)
+- ✅ Handle errors in every route
+- ✅ Validate input before processing
+
+**Pattern:**
+```typescript
+app.post('/endpoint', async (req: Request, res: Response) => {
+  try {
+    // Validate input
+    if (!req.file) {
+      return res.status(400).json({ error: 'Missing required field' });
+    }
+    
+    // Process
+    const result = await processRequest(req.file);
+    
+    // Return success
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Route error:', error);
+    return res.status(500).json({ 
+      error: 'Internal error',
+      message: (error as Error).message 
+    });
+  }
+});
+```
+
+### 2. Middleware
+- ✅ Type middleware properly: `(req: Request, res: Response, next: NextFunction)`
+- ✅ Always call `next()` or send a response
+- ✅ Use middleware for cross-cutting concerns (auth, logging, validation)
+- ✅ Place error handling middleware last
+
+### 3. Response Format
+- ✅ Use consistent JSON response structure
+- ✅ Include appropriate HTTP status codes
+- ✅ Return meaningful error messages
+- ✅ Use camelCase for JSON keys
+
+**Standard Responses:**
+```typescript
+// Success
+{ data: {...}, message: 'Success' }
+
+// Error
+{ error: 'Error type', message: 'Detailed message' }
+
+// List
+{ items: [...], total: 10, page: 1 }
+```
+
+### 4. Status Codes
+- ✅ 200: Success
+- ✅ 201: Created
+- ✅ 202: Accepted (async operations)
+- ✅ 400: Bad Request (client error)
+- ✅ 404: Not Found
+- ✅ 500: Internal Server Error
+- ✅ 503: Service Unavailable
+
+### 5. Input Validation
+- ✅ **ALWAYS** validate user input
+- ✅ Check file types and sizes
+- ✅ Sanitize filenames
+- ✅ Validate query parameters
+- ✅ Use middleware for common validations
+
+---
+
+## Code Organization
+
+### 1. File Structure
+```
+src/
+├── server.ts              # Main app setup
+├── worker.ts              # Background jobs
+├── types/
+│   └── index.ts          # Shared types
+├── services/             # Business logic
+│   ├── conversionService.ts
+│   ├── queueService.ts
+│   └── storageService.ts
+├── middleware/           # Express middleware (if needed)
+├── utils/               # Helper functions (if needed)
+└── config/              # Configuration (if needed)
+```
+
+### 2. Service Layer
+- ✅ Keep route handlers thin
+- ✅ Move business logic to service classes
+- ✅ Use singleton pattern for services (export instance)
+- ✅ Services should be stateless when possible
+
+**Pattern:**
+```typescript
+class MyService {
+  async doSomething(param: string): Promise<Result> {
+    // Business logic here
+  }
+}
+
+export default new MyService();
+```
+
+### 3. Imports
+- ✅ Group imports: external, internal, types
+- ✅ Use absolute imports when configured
+- ✅ Import only what you need
+- ✅ Organize imports alphabetically within groups
+
+**Pattern:**
+```typescript
+// External dependencies
+import express from 'express';
+import axios from 'axios';
+
+// Internal modules
+import conversionService from './services/conversionService';
+import queueService from './services/queueService';
+
+// Types
+import { JobData, JobStatus } from './types';
+```
+
+### 4. Constants
+- ✅ Use UPPER_SNAKE_CASE for constants
+- ✅ Define constants at module top
+- ✅ Use environment variables with defaults
+- ✅ Parse env vars once at startup
+
+**Pattern:**
+```typescript
+const GOTENBERG_URL = process.env.GOTENBERG_URL || 'http://gotenberg:3000';
+const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '52428800', 10);
+```
+
+---
+
+## Async Patterns
+
+### 1. Resource Cleanup
+- ✅ Use try-finally for cleanup
+- ✅ Always clean up temp files
+- ✅ Close connections properly
+- ✅ Handle cleanup errors gracefully
+
+**Pattern:**
+```typescript
+let tempFile: string | null = null;
+try {
+  tempFile = await createTempFile();
+  await processFile(tempFile);
+} finally {
+  if (tempFile) {
+    try {
+      await fs.unlink(tempFile);
+    } catch (err) {
+      console.error('Cleanup error:', err);
+    }
+  }
+}
+```
+
+### 2. Parallel Operations
+- ✅ Use `Promise.all()` for independent operations
+- ✅ Use `Promise.allSettled()` when some failures are acceptable
+- ✅ Limit concurrency for resource-intensive operations
+- ✅ Handle partial failures appropriately
+
+### 3. Timeouts
+- ✅ Set timeouts for external API calls
+- ✅ Use reasonable timeout values
+- ✅ Handle timeout errors explicitly
+
+---
+
+## Logging
+
+### 1. Console Logging (Current Pattern)
+- ✅ Log important events (job start/complete/fail)
+- ✅ Include relevant context (jobId, filename)
+- ✅ Use appropriate log levels conceptually
+- ✅ Log errors with full context
+
+**Pattern:**
+```typescript
+console.log(`[Worker] Processing job ${jobId}: ${filename}`);
+console.error('Conversion failed:', error);
+```
+
+### 2. Future: Structured Logging
+- Consider using Winston or Pino for production
+- Include timestamps, levels, and context
+- Log to files or external services
+
+---
+
+## Security
+
+### 1. Input Validation
+- ✅ Validate file types (MIME + extension)
+- ✅ Limit file sizes
+- ✅ Sanitize filenames (no path traversal)
+- ✅ Rate limit API endpoints
+- ✅ Use helmet for security headers
+
+### 2. Error Messages
+- ✅ Don't expose internal paths or stack traces to clients
+- ✅ Log detailed errors server-side
+- ✅ Return generic messages to clients
+- ✅ Include request IDs for debugging
+
+### 3. Dependencies
+- ✅ Keep dependencies updated
+- ✅ Use exact versions in package.json for stability
+- ✅ Audit dependencies regularly
+
+---
+
+## Performance
+
+### 1. Async Operations
+- ✅ Don't block the event loop
+- ✅ Use streaming for large files
+- ✅ Implement proper backpressure
+- ✅ Use worker threads for CPU-intensive tasks (if needed)
+
+### 2. Memory Management
+- ✅ Clean up temp files promptly
+- ✅ Use streams instead of loading large files in memory
+- ✅ Implement job timeouts
+- ✅ Monitor memory usage
+
+### 3. Database/Storage
+- ✅ Use connection pooling (Redis client handles this)
+- ✅ Set appropriate TTLs for cached data
+- ✅ Close connections on shutdown
+
+---
+
+## Testing (Future Enhancement)
+
+### 1. Unit Tests
+- Test service methods independently
+- Mock external dependencies
+- Test error conditions
+
+### 2. Integration Tests
+- Test API endpoints
+- Test with real services in docker-compose
+- Test async job processing
+
+### 3. Test Organization
+```
+tests/
+├── unit/
+│   ├── services/
+│   └── utils/
+└── integration/
+    └── api/
+```
+
+---
+
+## Docker & Deployment
+
+### 1. Docker Best Practices
+- ✅ Multi-stage builds for smaller images
+- ✅ Use specific base image versions
+- ✅ Run as non-root user
+- ✅ Set health checks
+- ✅ Use .dockerignore
+
+### 2. Environment Variables
+- ✅ Use .env for local development
+- ✅ Never commit .env files
+- ✅ Document all env vars in .env.example
+- ✅ Validate required env vars at startup
+
+---
+
+## Git Commit Messages
+
+Format: `<type>: <description>`
+
+Types:
+- `feat`: New feature
+- `fix`: Bug fix
+- `refactor`: Code refactoring
+- `docs`: Documentation
+- `test`: Tests
+- `chore`: Build/config changes
+
+Example: `feat: add batch conversion endpoint`
+
+---
+
+## Documentation
+
+### 1. Code Comments
+- ✅ Use JSDoc for public APIs
+- ✅ Document complex logic
+- ✅ Explain "why" not "what"
+- ✅ Keep comments up to date
+
+**Pattern:**
+```typescript
+/**
+ * Convert a document to PDF using Gotenberg
+ * @param filePath - Path to the input file
+ * @param originalName - Original filename for proper content-type detection
+ * @returns PDF buffer
+ * @throws Error if conversion fails
+ */
+async convertToPDF(filePath: string, originalName: string): Promise<Buffer> {
+  // implementation
+}
+```
+
+### 2. API Documentation
+- Document all endpoints in README.md
+- Include request/response examples
+- Document error responses
+- Keep API docs in sync with code
+
+---
+
+## Project-Specific Rules
+
+### 1. Job Processing
+- Always update job status in Redis
+- Clean up temp files after processing
+- Handle job failures gracefully
+- Set job expiration (24 hours default)
+
+### 2. File Handling
+- Store uploads in /tmp/conversions
+- Use UUIDs for unique filenames
+- Clean up files even on error
+- Validate file types before processing
+
+### 3. Storage (MinIO)
+- Organize by jobId: `${jobId}/filename`
+- Generate presigned URLs for downloads
+- Set appropriate Content-Type headers
+- Clean up old files (implement retention policy)
+
+### 4. Queue (Redis/Bull)
+- Use separate queues for PNG and PDF
+- Set retry attempts (3) with exponential backoff
+- Monitor queue depth
+- Handle stalled jobs
+
+### 5. Conversion (Gotenberg)
+- Set appropriate timeouts (300s)
+- Handle conversion errors gracefully
+- Support both DOCX and PPTX formats
+- Configure DPI for PNG output
+
+---
+
+## Code Review Checklist
+
+Before committing:
+- [ ] TypeScript compiles without errors (`npm run typecheck`)
+- [ ] No `any` types used
+- [ ] Error handling in place
+- [ ] Cleanup code in finally blocks
+- [ ] Input validation added
+- [ ] Appropriate HTTP status codes
+- [ ] Logging added for important events
+- [ ] Types exported from types/index.ts
+- [ ] Documentation updated
+- [ ] No sensitive data in code
+
+---
+
+## Common Patterns to Follow
+
+### Route Handler Template
+```typescript
+app.post('/endpoint', upload.single('file'), async (req: Request, res: Response) => {
+  let tempFile: string | null = null;
+  
+  try {
+    // 1. Validate input
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    
+    tempFile = req.file.path;
+    
+    // 2. Process
+    const result = await service.process(tempFile, req.file.originalname);
+    
+    // 3. Return success
+    return res.status(200).json(result);
+    
+  } catch (error) {
+    console.error('Endpoint error:', error);
+    return res.status(500).json({
+      error: 'Processing failed',
+      message: (error as Error).message
+    });
+  } finally {
+    // 4. Cleanup
+    if (tempFile) {
+      try {
+        await fs.unlink(tempFile);
+      } catch (err) {
+        console.error('Cleanup error:', err);
+      }
+    }
+  }
+});
+```
+
+### Service Method Template
+```typescript
+async methodName(param1: Type1, param2: Type2): Promise<ReturnType> {
+  try {
+    // Validate inputs
+    if (!param1) {
+      throw new Error('param1 is required');
+    }
+    
+    // Business logic
+    const result = await someOperation(param1, param2);
+    
+    // Return result
+    return result;
+    
+  } catch (error) {
+    console.error('Method error:', error);
+    throw new Error(`Operation failed: ${(error as Error).message}`);
+  }
+}
+```
+
+---
+
+## When in Doubt
+
+1. **Type Safety**: If unsure about a type, be explicit rather than using `any`
+2. **Error Handling**: When in doubt, add more error handling
+3. **Logging**: Add context to help debug issues later
+4. **Cleanup**: Always clean up resources (files, connections)
+5. **Validation**: Validate user input early and thoroughly
+6. **Documentation**: If code is complex, add a comment explaining why
+
+---
+
+**Remember**: These rules exist to maintain code quality, prevent bugs, and make the codebase maintainable. When adding new features, follow existing patterns in the codebase.
+

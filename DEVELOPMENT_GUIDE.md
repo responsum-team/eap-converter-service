@@ -68,12 +68,12 @@ This project has comprehensive coding standards in `.cursorrules`. Key points:
 
 #### 1. Type Safety
 ```typescript
-// ✅ Good
+// Good
 async function convert(file: string): Promise<Buffer> {
   return await service.convert(file);
 }
 
-// ❌ Bad - never use 'any'
+// Bad - never use 'any'
 async function convert(file: any): Promise<any> {
   return await service.convert(file);
 }
@@ -81,7 +81,7 @@ async function convert(file: any): Promise<any> {
 
 #### 2. Error Handling
 ```typescript
-// ✅ Always use try-catch with proper typing
+// Always use try-catch with proper typing
 try {
   const result = await riskyOperation();
 } catch (error) {
@@ -92,7 +92,7 @@ try {
 
 #### 3. Route Handlers
 ```typescript
-// ✅ Type Request and Response
+// Type Request and Response
 app.post('/endpoint', async (req: Request, res: Response) => {
   try {
     if (!req.body.field) {
