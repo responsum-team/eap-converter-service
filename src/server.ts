@@ -10,6 +10,7 @@ import conversionService from './services/conversionService';
 import queueService from './services/queueService';
 import storageService from './services/storageService';
 import dotenv from 'dotenv';
+import azureJwtAuth from './middleware/azureJwtAuth';
 
 // Load environment variables
 dotenv.config();
@@ -22,6 +23,9 @@ const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '52428800', 10); // 
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
+
+// NOTE: authentication is applied per-route for upload endpoints to ensure multer doesn't run before auth
+// (route-level middleware is applied for /convert/* endpoints)
 
 // Rate limiting
 const limiter = rateLimit({
@@ -100,7 +104,7 @@ app.get('/healthz', async (_req: Request, res: Response) => {
 });
 
 // Synchronous PDF conversion
-app.post('/convert/pdf', upload.single('file'), async (req: Request, res: Response): Promise<void> => {
+app.post('/convert/pdf', azureJwtAuth, upload.single('file'), async (req: Request, res: Response): Promise<void> => {
   let filePath: string | null = null;
   
   try {
@@ -142,7 +146,7 @@ app.post('/convert/pdf', upload.single('file'), async (req: Request, res: Respon
 });
 
 // Asynchronous PNG conversion
-app.post('/convert/png', upload.single('file'), async (req: Request, res: Response): Promise<void> => {
+app.post('/convert/png', azureJwtAuth, upload.single('file'), async (req: Request, res: Response): Promise<void> => {
   try {
     if (!req.file) {
       res.status(400).json({ error: 'No file uploaded' });
@@ -188,7 +192,7 @@ app.post('/convert/png', upload.single('file'), async (req: Request, res: Respon
 });
 
 // Batch conversion
-app.post('/convert/batch', upload.array('files', 10), async (req: Request, res: Response): Promise<void> => {
+app.post('/convert/batch', azureJwtAuth, upload.array('files', 10), async (req: Request, res: Response): Promise<void> => {
   try {
     if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
       res.status(400).json({ error: 'No files uploaded' });
@@ -378,7 +382,19 @@ async function startServer(): Promise<void> {
     // Initialize services
     await storageService.initialize();
     await queueService.initialize();
-    
+    // Log deployed middleware file info to help verify correct image/version
+    try {
+      const deployedPath = '/app/dist/middleware/azureJwtAuth.js';
+      const stat = await fs.stat(deployedPath).catch(() => null);
+      if (stat) {
+        console.log(`BUILD INFO: deployed ${deployedPath} size=${stat.size} mtime=${stat.mtime.toISOString()}`);
+      } else {
+        console.log(`BUILD INFO: ${deployedPath} not found in container filesystem`);
+      }
+    } catch (err) {
+      console.log('BUILD INFO: error checking deployed middleware file', (err as Error).message);
+    }
+
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Document Conversion API Server running on port ${PORT}`);
       console.log(`Environment: ${process.env.NODE_ENV}`);
@@ -404,4 +420,3 @@ process.on('SIGINT', async () => {
 });
 
 startServer();
-
