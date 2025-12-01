@@ -19,7 +19,7 @@ const PORT = parseInt(process.env.PORT || '8080', 10);
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '52428800', 10); // 50MB default
 
 // Middleware
-app.use(helmet());
+// app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
