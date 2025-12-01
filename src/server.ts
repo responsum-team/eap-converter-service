@@ -93,6 +93,12 @@ app.get('/health', async (_req: Request, res: Response) => {
   }
 });
 
+
+// Healthcheck endpoint, replace with /health logic in future
+app.get('/healthz', async (_req: Request, res: Response) => {
+    return res.status(200).json({ status: 'ok' });
+});
+
 // Synchronous PDF conversion
 app.post('/convert/pdf', upload.single('file'), async (req: Request, res: Response): Promise<void> => {
   let filePath: string | null = null;
