@@ -42,13 +42,13 @@ export default async function azureJwtAuth(req: Request, res: Response, next: Ne
   const authHeader = (req.headers['authorization'] || req.headers['Authorization']) as string | undefined;
   if (!authHeader) {
     console.log('[auth] missing Authorization header');
-    res.status(401).json({ error: 'Missing Authorization header' });
+    res.status(401).json({ error: 'Unauthorized' });
     return;
   }
 
   const parts = authHeader.split(' ');
   if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer') {
-    res.status(401).json({ error: 'Invalid Authorization header format' });
+    res.status(401).json({ error: 'Unauthorized' });
     return;
   }
 
@@ -58,13 +58,13 @@ export default async function azureJwtAuth(req: Request, res: Response, next: Ne
     unverifiedHeader = jwt.decode(token, { complete: true }) as { header?: any } | null;
   } catch (err: any) {
     console.log('[auth] token decoding failed:', err && err.message ? err.message : String(err));
-    res.status(401).json({ error: 'Invalid token', detail: err?.message || String(err) });
+    res.status(401).json({ error: 'Unauthorized'});
     return;
   }
 
   const kid = unverifiedHeader?.header?.kid;
   if (!kid) {
-    res.status(401).json({ error: 'Invalid token header (no kid)' });
+    res.status(401).json({ error: 'Unauthorized' });
     return;
   }
 
@@ -82,7 +82,7 @@ export default async function azureJwtAuth(req: Request, res: Response, next: Ne
     // Extra tenant validation similar to Python implementation
     if (payload && payload.tid && TENANT_ID && payload.tid !== TENANT_ID) {
       console.log('[auth] invalid tenant in token', payload.tid);
-      res.status(401).json({ error: 'Invalid tenant' });
+      res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
@@ -92,7 +92,7 @@ export default async function azureJwtAuth(req: Request, res: Response, next: Ne
     return;
   } catch (err: any) {
     console.log('[auth] token verification failed:', err && err.message ? err.message : String(err));
-    res.status(401).json({ error: 'Invalid token', detail: err?.message || String(err) });
+    res.status(401).json({ error: 'Unauthorized'});
     return;
   }
 }
