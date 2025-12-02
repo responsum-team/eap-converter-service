@@ -28,28 +28,6 @@ function getSigningKeyAsync(kid: string): Promise<string> {
   });
 }
 
- // Validate that the token is valid base64 (JWT are base64url encoded but to catch garbage tokens quick)
-    // This does NOT check signature, just decoding
-function isValidBase64(input: string): boolean {
-  // JWT tokens have three parts separated by '.'
-  const parts = input.split('.');
-  if (parts.length !== 3) {
-    return false;
-  }
-  for (const part of parts) {
-    // base64url decoding validation: replace - with + and _ with /
-    const normalized = part.replace(/-/g, '+').replace(/_/g, '/');
-    // Add padding if necessary
-    const padding = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4));
-    try {
-      Buffer.from(normalized + padding, 'base64');
-    } catch (e) {
-      return false;
-    }
-  }
-  return true;
-}
-
 export default async function azureJwtAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   // Indicate middleware is active for debugging
   console.log(`[auth] middleware invoked - path=${req.path} method=${req.method}`);
@@ -75,8 +53,15 @@ export default async function azureJwtAuth(req: Request, res: Response, next: Ne
   }
 
   const token = parts[1];
+  let unverifiedHeader: { header?: any } | null = null;
+  try {
+    unverifiedHeader = jwt.decode(token, { complete: true }) as { header?: any } | null;
+  } catch (err: any) {
+    console.log('[auth] token decoding failed:', err && err.message ? err.message : String(err));
+    res.status(401).json({ error: 'Invalid token', detail: err?.message || String(err) });
+    return;
+  }
 
-  const unverifiedHeader = jwt.decode(token, { complete: true }) as { header?: any } | null;
   const kid = unverifiedHeader?.header?.kid;
   if (!kid) {
     res.status(401).json({ error: 'Invalid token header (no kid)' });
@@ -91,12 +76,6 @@ export default async function azureJwtAuth(req: Request, res: Response, next: Ne
       issuer: issuer || undefined,
       algorithms: ['RS256'],
     };
-
-
-    if (!isValidBase64(token)) {
-      res.status(401).json({ error: 'Malformed token (not valid base64)' });
-      return;
-    }
 
     const payload = jwt.verify(token, signingKey, verifyOptions) as any;
 
