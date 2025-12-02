@@ -46,6 +46,8 @@ services:
       - MINIO_BUCKET=conversions
       - MAX_FILE_SIZE=52428800
       - PNG_DPI=150
+    env_file:
+      - .env
     depends_on:
       - gotenberg
       - redis
@@ -80,6 +82,8 @@ services:
       - MINIO_USE_SSL=false
       - MINIO_BUCKET=conversions
       - PNG_DPI=150
+    env_file:
+      - .env
     depends_on:
       - gotenberg
       - redis
@@ -163,4 +167,3 @@ volumes:
 networks:
   converter-network:
     driver: bridge
-

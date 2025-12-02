@@ -26,7 +26,7 @@ install: ## Install npm dependencies
 
 dev: ## Start development environment (infrastructure only, run API/Worker locally)
 	@echo "$(BLUE)Starting development environment...$(NC)"
-	docker-compose -f docker-compose.dev.yml up -d
+	docker compose -f docker-compose.dev.yml up -d
 	@echo ""
 	@echo "$(GREEN)✓ Development services started!$(NC)"
 	@echo ""
@@ -52,7 +52,7 @@ dev-worker: install ## Start Worker in development mode with hot reload
 
 start: ## Start production stack (all services with Docker)
 	@echo "$(BLUE)Starting production stack...$(NC)"
-	docker-compose up -d
+	docker compose up -d
 	@echo ""
 	@echo "$(GREEN)✓ Production services started!$(NC)"
 	@echo ""
@@ -68,30 +68,30 @@ start: ## Start production stack (all services with Docker)
 
 stop: ## Stop all services
 	@echo "$(BLUE)Stopping all services...$(NC)"
-	docker-compose down
+	docker compose down
 	@echo "$(GREEN)✓ Services stopped$(NC)"
 
 stop-dev: ## Stop development services
 	@echo "$(BLUE)Stopping development services...$(NC)"
-	docker-compose -f docker-compose.dev.yml down
+	docker compose -f docker-compose.dev.yml down
 	@echo "$(GREEN)✓ Development services stopped$(NC)"
 
 restart: stop start ## Restart all services
 
 status: ## Show status of all services
 	@echo "$(BLUE)Service Status:$(NC)"
-	@docker-compose ps
+	@docker compose ps
 
 ##@ Build
 
 build: ## Build Docker images
 	@echo "$(BLUE)Building Docker images...$(NC)"
-	docker-compose build
+	docker compose build
 	@echo "$(GREEN)✓ Build complete$(NC)"
 
 rebuild: ## Rebuild Docker images from scratch (no cache)
 	@echo "$(BLUE)Rebuilding Docker images (no cache)...$(NC)"
-	docker-compose build --no-cache
+	docker compose build --no-cache
 	@echo "$(GREEN)✓ Rebuild complete$(NC)"
 
 typecheck: ## Run TypeScript type checking
@@ -107,19 +107,19 @@ compile: ## Compile TypeScript to JavaScript
 ##@ Logs & Monitoring
 
 logs: ## View logs from all services
-	docker-compose logs -f
+	docker compose logs -f
 
 logs-api: ## View API logs
-	docker-compose logs -f api
+	docker compose logs -f api
 
 logs-worker: ## View Worker logs
-	docker-compose logs -f worker
+	docker compose logs -f worker
 
 logs-gotenberg: ## View Gotenberg logs
-	docker-compose logs -f gotenberg
+	docker compose logs -f gotenberg
 
 logs-redis: ## View Redis logs
-	docker-compose logs -f redis
+	docker compose logs -f redis
 
 health: ## Check health of all services
 	@echo "$(BLUE)Checking service health...$(NC)"
@@ -128,7 +128,7 @@ health: ## Check health of all services
 	@curl -s http://localhost:3001/health | jq '.' || echo "$(RED)✗ API not responding$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Docker Services:$(NC)"
-	@docker-compose ps
+	@docker compose ps
 	@echo ""
 
 ##@ Testing
@@ -154,17 +154,17 @@ clean: ## Stop services and remove volumes (WARNING: deletes all data)
 	@echo "$(RED)WARNING: This will delete all data including MinIO storage and Redis data$(NC)"
 	@echo -n "Are you sure? [y/N] " && read ans && [ $${ans:-N} = y ]
 	@echo "$(BLUE)Cleaning up...$(NC)"
-	docker-compose down -v
+	docker compose down -v
 	@echo "$(GREEN)✓ Cleanup complete$(NC)"
 
 clean-dev: ## Stop development services and remove volumes
 	@echo "$(BLUE)Cleaning up development environment...$(NC)"
-	docker-compose -f docker-compose.dev.yml down -v
+	docker compose -f docker-compose.dev.yml down -v
 	@echo "$(GREEN)✓ Development cleanup complete$(NC)"
 
 clean-images: ## Remove Docker images
 	@echo "$(BLUE)Removing Docker images...$(NC)"
-	docker-compose down --rmi all
+	docker compose down --rmi all
 	@echo "$(GREEN)✓ Images removed$(NC)"
 
 clean-all: clean clean-images ## Complete cleanup (services, volumes, images)

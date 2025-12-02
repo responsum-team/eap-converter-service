@@ -10,6 +10,7 @@ import conversionService from './services/conversionService';
 import queueService from './services/queueService';
 import storageService from './services/storageService';
 import dotenv from 'dotenv';
+import azureJwtAuth from './middleware/azureJwtAuth';
 
 // Load environment variables
 dotenv.config();
@@ -27,6 +28,9 @@ const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || '52428800', 10); // 
 // );
 app.use(cors());
 app.use(express.json());
+
+// NOTE: authentication is applied per-route for upload endpoints to ensure multer doesn't run before auth
+// (route-level middleware is applied for /convert/* endpoints)
 
 // Rate limiting
 const limiter = rateLimit({
@@ -70,34 +74,6 @@ const upload = multer({
   }
 });
 
-// Health check endpoint
-app.get('/health', async (_req: Request, res: Response) => {
-  try {
-    // Check dependencies
-    const gotenbergHealth = await conversionService.checkHealth();
-    const redisHealth = await queueService.checkHealth();
-    const minioHealth = await storageService.checkHealth();
-
-    const health = {
-      status: 'ok' as const,
-      timestamp: new Date().toISOString(),
-      services: {
-        gotenberg: gotenbergHealth ? ('up' as const) : ('down' as const),
-        redis: redisHealth ? ('up' as const) : ('down' as const),
-        minio: minioHealth ? ('up' as const) : ('down' as const)
-      }
-    };
-
-    const allHealthy = gotenbergHealth && redisHealth && minioHealth;
-    return res.status(allHealthy ? 200 : 503).json(health);
-  } catch (error) {
-    return res.status(503).json({
-      status: 'error',
-      message: (error as Error).message
-    });
-  }
-});
-
 
 // Healthcheck endpoint, replace with /health logic in future
 app.get('/healthz', async (_req: Request, res: Response) => {
@@ -105,7 +81,7 @@ app.get('/healthz', async (_req: Request, res: Response) => {
 });
 
 // Synchronous PDF conversion
-app.post('/convert/pdf', upload.single('file'), async (req: Request, res: Response): Promise<void> => {
+app.post('/convert/pdf', azureJwtAuth, upload.single('file'), async (req: Request, res: Response): Promise<void> => {
   let filePath: string | null = null;
   
   try {
@@ -143,204 +119,6 @@ app.post('/convert/pdf', upload.single('file'), async (req: Request, res: Respon
         console.error('Error deleting temp file:', err);
       }
     }
-  }
-});
-
-// Asynchronous PNG conversion
-app.post('/convert/png', upload.single('file'), async (req: Request, res: Response): Promise<void> => {
-  try {
-    if (!req.file) {
-      res.status(400).json({ error: 'No file uploaded' });
-      return;
-    }
-
-    const jobId = uuidv4();
-    const dpi = parseInt(req.body.dpi, 10) || parseInt(process.env.PNG_DPI || '150', 10);
-
-    console.log(`Queuing PNG conversion job ${jobId} for ${req.file.originalname}`);
-
-    // Queue the job
-    await queueService.addPNGConversionJob({
-      jobId,
-      filePath: req.file.path,
-      originalName: req.file.originalname,
-      dpi
-    });
-
-    res.status(202).json({
-      jobId,
-      status: 'queued',
-      message: 'Conversion job queued successfully',
-      statusUrl: `/jobs/${jobId}`
-    });
-  } catch (error) {
-    console.error('Error queuing PNG conversion:', error);
-    
-    // Cleanup on error
-    if (req.file && req.file.path) {
-      try {
-        await fs.unlink(req.file.path);
-      } catch (err) {
-        console.error('Error deleting temp file:', err);
-      }
-    }
-    
-    res.status(500).json({
-      error: 'Failed to queue conversion job',
-      message: (error as Error).message
-    });
-  }
-});
-
-// Batch conversion
-app.post('/convert/batch', upload.array('files', 10), async (req: Request, res: Response): Promise<void> => {
-  try {
-    if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
-      res.status(400).json({ error: 'No files uploaded' });
-      return;
-    }
-
-    const batchId = uuidv4();
-    const format = req.body.format || 'pdf'; // pdf or png
-    const dpi = parseInt(req.body.dpi, 10) || parseInt(process.env.PNG_DPI || '150', 10);
-
-    console.log(`Queuing batch conversion ${batchId} with ${req.files.length} files`);
-
-    const jobs = [];
-    for (const file of req.files) {
-      const jobId = uuidv4();
-      
-      if (format === 'png') {
-        await queueService.addPNGConversionJob({
-          jobId,
-          batchId,
-          filePath: file.path,
-          originalName: file.originalname,
-          dpi
-        });
-      } else {
-        await queueService.addPDFConversionJob({
-          jobId,
-          batchId,
-          filePath: file.path,
-          originalName: file.originalname
-        });
-      }
-
-      jobs.push({
-        jobId,
-        filename: file.originalname,
-        status: 'queued'
-      });
-    }
-
-    res.status(202).json({
-      batchId,
-      status: 'queued',
-      jobs,
-      message: `${jobs.length} conversion jobs queued successfully`,
-      statusUrl: `/jobs/batch/${batchId}`
-    });
-  } catch (error) {
-    console.error('Error queuing batch conversion:', error);
-    
-    // Cleanup on error
-    if (req.files && Array.isArray(req.files)) {
-      for (const file of req.files) {
-        try {
-          await fs.unlink(file.path);
-        } catch (err) {
-          console.error('Error deleting temp file:', err);
-        }
-      }
-    }
-    
-    res.status(500).json({
-      error: 'Failed to queue batch conversion',
-      message: (error as Error).message
-    });
-  }
-});
-
-// Get job status
-app.get('/jobs/:jobId', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { jobId } = req.params;
-    const jobStatus = await queueService.getJobStatus(jobId);
-
-    if (!jobStatus) {
-      res.status(404).json({ error: 'Job not found' });
-      return;
-    }
-
-    res.json(jobStatus);
-  } catch (error) {
-    console.error('Error getting job status:', error);
-    res.status(500).json({
-      error: 'Failed to get job status',
-      message: (error as Error).message
-    });
-  }
-});
-
-// Get batch status
-app.get('/jobs/batch/:batchId', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { batchId } = req.params;
-    const batchStatus = await queueService.getBatchStatus(batchId);
-
-    if (!batchStatus || batchStatus.jobs.length === 0) {
-      res.status(404).json({ error: 'Batch not found' });
-      return;
-    }
-
-    res.json(batchStatus);
-  } catch (error) {
-    console.error('Error getting batch status:', error);
-    res.status(500).json({
-      error: 'Failed to get batch status',
-      message: (error as Error).message
-    });
-  }
-});
-
-// Download job results
-app.get('/jobs/:jobId/download', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { jobId } = req.params;
-    const jobStatus = await queueService.getJobStatus(jobId);
-
-    if (!jobStatus) {
-      res.status(404).json({ error: 'Job not found' });
-      return;
-    }
-
-    if (jobStatus.status !== 'completed') {
-      res.status(400).json({
-        error: 'Job not completed',
-        status: jobStatus.status
-      });
-      return;
-    }
-
-    if (!jobStatus.resultPath) {
-      res.status(500).json({ error: 'Result path not found' });
-      return;
-    }
-
-    // Download from MinIO and stream to client
-    const downloadStream = await storageService.downloadFile(jobStatus.resultPath);
-    
-    res.setHeader('Content-Type', jobStatus.contentType || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${jobStatus.filename}"`);
-    
-    downloadStream.pipe(res);
-  } catch (error) {
-    console.error('Error downloading job result:', error);
-    res.status(500).json({
-      error: 'Failed to download result',
-      message: (error as Error).message
-    });
   }
 });
 
@@ -383,7 +161,19 @@ async function startServer(): Promise<void> {
     // Initialize services
     await storageService.initialize();
     await queueService.initialize();
-    
+    // Log deployed middleware file info to help verify correct image/version
+    try {
+      const deployedPath = '/app/dist/middleware/azureJwtAuth.js';
+      const stat = await fs.stat(deployedPath).catch(() => null);
+      if (stat) {
+        console.log(`BUILD INFO: deployed ${deployedPath} size=${stat.size} mtime=${stat.mtime.toISOString()}`);
+      } else {
+        console.log(`BUILD INFO: ${deployedPath} not found in container filesystem`);
+      }
+    } catch (err) {
+      console.log('BUILD INFO: error checking deployed middleware file', (err as Error).message);
+    }
+
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Document Conversion API Server running on port ${PORT}`);
       console.log(`Environment: ${process.env.NODE_ENV}`);
@@ -409,4 +199,3 @@ process.on('SIGINT', async () => {
 });
 
 startServer();
-
