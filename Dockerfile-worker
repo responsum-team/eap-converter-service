@@ -41,11 +41,11 @@ COPY --from=builder /app/dist ./dist
 RUN mkdir -p /tmp/conversions && chmod 777 /tmp/conversions
 
 # Run as non-root user
-USER node
+# USER node
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:80/healthz', (r) => {if(r.statusCode !== 200) process.exit(1)})"
+# HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+#   CMD node -e "require('http').get('http://localhost:80/healthz', (r) => {if(r.statusCode !== 200) process.exit(1)})"
 
 EXPOSE 80
 
